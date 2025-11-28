@@ -33,6 +33,7 @@ class FieldInfo:
     table: str | None = None
     usage: str = ""  # 'read', 'write', 'kept', 'dropped'
     contexts: list[str] = field(default_factory=list)
+    source_tables: list[str] = field(default_factory=list)  # Tables this field comes from
 
 
 @dataclass
@@ -106,6 +107,7 @@ def extract_fields(result: ParseResult) -> list[FieldInfo]:
                 table=usage.field.table_alias,
                 usage=usage.usage_type,
                 contexts=[usage.context],
+                source_tables=list(usage.source_tables) if usage.source_tables else [],
             )
         else:
             info = fields_dict[key]
@@ -113,6 +115,11 @@ def extract_fields(result: ParseResult) -> list[FieldInfo]:
                 info.usage = usage.usage_type
             if usage.context not in info.contexts:
                 info.contexts.append(usage.context)
+            # Merge source tables
+            if usage.source_tables:
+                for st in usage.source_tables:
+                    if st not in info.source_tables:
+                        info.source_tables.append(st)
 
     return list(fields_dict.values())
 

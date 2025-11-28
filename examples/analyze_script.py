@@ -80,25 +80,33 @@ def analyze_sas_code(source: str, source_name: str = "SAS Code") -> None:
         kept_fields = [f for f in extraction.fields if f.usage == "kept"]
         dropped_fields = [f for f in extraction.fields if f.usage == "dropped"]
 
+        def format_field(f):
+            """Format a field with its source tables."""
+            if f.source_tables:
+                tables = ", ".join(f.source_tables)
+                return f"{f.name} (from: {tables})"
+            return f.name
+
         if read_fields:
             print(f"\nFields Read ({len(read_fields)}):")
-            for f in sorted(set(f.name for f in read_fields)):
-                print(f"  - {f}")
+            # Sort by name but show with source tables
+            for f in sorted(read_fields, key=lambda x: x.name.lower()):
+                print(f"  - {format_field(f)}")
 
         if write_fields:
             print(f"\nFields Written/Created ({len(write_fields)}):")
-            for f in sorted(set(f.name for f in write_fields)):
-                print(f"  - {f}")
+            for f in sorted(write_fields, key=lambda x: x.name.lower()):
+                print(f"  - {format_field(f)}")
 
         if kept_fields:
             print(f"\nFields in KEEP statements ({len(kept_fields)}):")
-            for f in sorted(set(f.name for f in kept_fields)):
-                print(f"  - {f}")
+            for f in sorted(kept_fields, key=lambda x: x.name.lower()):
+                print(f"  - {format_field(f)}")
 
         if dropped_fields:
             print(f"\nFields in DROP statements ({len(dropped_fields)}):")
-            for f in sorted(set(f.name for f in dropped_fields)):
-                print(f"  - {f}")
+            for f in sorted(dropped_fields, key=lambda x: x.name.lower()):
+                print(f"  - {format_field(f)}")
 
     # --- Dependencies ---
     print_separator("DATA LINEAGE")

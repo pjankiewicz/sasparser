@@ -10,7 +10,8 @@ from ..ast.data_step import (
     WhereStatement, IfStatement, AssignmentStatement, KeepStatement,
     DropStatement, OutputStatement, DataStepStatement,
 )
-from ..ast.expressions import Expression, FieldExpression, Literal, BinaryExpression
+from ..ast.expressions import Expression, FieldExpression, Literal, BinaryExpression, FunctionCall
+from ..core.functions import is_sas_function
 
 
 @register
@@ -301,21 +302,114 @@ class DataStepHandler(BaseHandler):
         return self._build_expression(expr_tokens), pos
 
     def _build_expression(self, tokens: list[Token]) -> Expression:
-        """Build expression from tokens (simplified parser)."""
-        # This is a simplified expression builder
-        # For now, just extract field references
-        fields: list[FieldReference] = []
-        for tok in tokens:
-            if tok.type == TokenType.IDENTIFIER:
-                fields.append(FieldReference(name=tok.value))
+        """Build expression from tokens (simplified parser).
 
-        if len(fields) == 1:
+        Properly distinguishes between:
+        - Function calls (identifier followed by parenthesis)
+        - Field references (identifiers that are not function names)
+        """
+        if not tokens:
+            return Literal(value="<expression>", literal_type="string")
+
+        # Collect field references and function calls
+        fields: list[FieldReference] = []
+        functions: list[FunctionCall] = []
+        i = 0
+
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == TokenType.IDENTIFIER:
+                # Check if this is a function call (followed by '(')
+                if i + 1 < len(tokens) and tokens[i + 1].type == TokenType.LPAREN:
+                    # This is a function call - parse arguments
+                    func_name = tok.value
+                    func_args: list[Expression] = []
+                    # Find matching closing parenthesis
+                    depth = 0
+                    arg_start = i + 2
+                    j = i + 1
+                    while j < len(tokens):
+                        if tokens[j].type == TokenType.LPAREN:
+                            depth += 1
+                        elif tokens[j].type == TokenType.RPAREN:
+                            depth -= 1
+                            if depth == 0:
+                                # Parse arguments between arg_start and j
+                                arg_tokens = tokens[arg_start:j]
+                                if arg_tokens:
+                                    # Split by comma and recursively parse each arg
+                                    arg_fields = self._extract_fields_from_tokens(arg_tokens)
+                                    func_args = [
+                                        FieldExpression(field=f) for f in arg_fields
+                                    ]
+                                break
+                        j += 1
+                    functions.append(FunctionCall(name=func_name, arguments=func_args))
+                    i = j + 1
+                    continue
+                elif is_sas_function(tok.value):
+                    # Known function name without parentheses - skip it
+                    i += 1
+                    continue
+                else:
+                    # This is a field reference
+                    fields.append(FieldReference(name=tok.value))
+            i += 1
+
+        # Build result expression
+        if len(fields) == 1 and not functions:
             return FieldExpression(field=fields[0])
 
-        # Return a placeholder binary expression
+        # If we have functions, return a compound expression
+        if functions:
+            # Return function with arguments containing field refs
+            if functions[0].arguments:
+                return functions[0]
+            elif fields:
+                # Function with field arguments
+                func = functions[0]
+                func.arguments = [FieldExpression(field=f) for f in fields]
+                return func
+            else:
+                return functions[0]
+
+        # Return a placeholder binary expression for multiple fields
         if len(fields) >= 2:
             left = FieldExpression(field=fields[0])
             right = FieldExpression(field=fields[1])
             return BinaryExpression(left=left, operator="?", right=right)
 
         return Literal(value="<expression>", literal_type="string")
+
+    def _extract_fields_from_tokens(self, tokens: list[Token]) -> list[FieldReference]:
+        """Extract field references from tokens, ignoring function names."""
+        fields: list[FieldReference] = []
+        i = 0
+
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == TokenType.IDENTIFIER:
+                # Skip if followed by ( (function call)
+                if i + 1 < len(tokens) and tokens[i + 1].type == TokenType.LPAREN:
+                    # Skip the function and its arguments
+                    depth = 0
+                    j = i + 1
+                    while j < len(tokens):
+                        if tokens[j].type == TokenType.LPAREN:
+                            depth += 1
+                        elif tokens[j].type == TokenType.RPAREN:
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        j += 1
+                    i = j + 1
+                    continue
+                elif is_sas_function(tok.value):
+                    # Known function name - skip
+                    i += 1
+                    continue
+                else:
+                    fields.append(FieldReference(name=tok.value))
+            i += 1
+
+        return fields

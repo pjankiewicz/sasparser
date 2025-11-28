@@ -3,7 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from .base import ASTVisitor
-from ..ast.base import ASTNode, FieldReference
+from ..ast.base import ASTNode, FieldReference, TableReference
 
 
 @dataclass
@@ -14,6 +14,7 @@ class FieldUsage:
     usage_type: str  # 'read', 'write', 'both', 'kept', 'dropped'
     context: str  # e.g., 'data_step', 'proc_sql.select', 'proc_sql.where'
     table_context: str | None = None  # The table this field belongs to
+    source_tables: list[str] | None = None  # Source tables for read fields
 
 
 class FieldVisitor(ASTVisitor):
@@ -30,6 +31,8 @@ class FieldVisitor(ASTVisitor):
         self.all_usages: list[FieldUsage] = []
         self._current_context: str = ""
         self._current_table: str | None = None
+        self._current_source_tables: list[str] = []  # Source tables (from SET/MERGE)
+        self._current_output_tables: list[str] = []  # Output tables
 
     def get_all_fields(self) -> list[FieldReference]:
         """Get all unique fields referenced."""
@@ -78,6 +81,7 @@ class FieldVisitor(ASTVisitor):
                     usage_type="read",
                     context=self._current_context,
                     table_context=self._current_table,
+                    source_tables=list(self._current_source_tables) if self._current_source_tables else None,
                 )
             )
 
@@ -90,6 +94,7 @@ class FieldVisitor(ASTVisitor):
                     usage_type="write",
                     context=self._current_context,
                     table_context=self._current_table,
+                    source_tables=list(self._current_output_tables) if self._current_output_tables else None,
                 )
             )
 
@@ -105,12 +110,29 @@ class FieldVisitor(ASTVisitor):
 
     # DATA step
     def visit_DataStep(self, node: ASTNode) -> None:
-        from ..ast.data_step import DataStep
+        from ..ast.data_step import DataStep, SetStatement, MergeStatement
 
         assert isinstance(node, DataStep)
         self._current_context = "data_step"
+
+        # Track output tables
+        self._current_output_tables = [t.qualified_name for t in node.output_tables]
+
+        # Find source tables from SET and MERGE statements
+        self._current_source_tables = []
+        for stmt in node.statements:
+            if isinstance(stmt, SetStatement):
+                self._current_source_tables.extend(t.qualified_name for t in stmt.tables)
+            elif isinstance(stmt, MergeStatement):
+                self._current_source_tables.extend(t.qualified_name for t in stmt.tables)
+
+        # Now visit all statements
         for stmt in node.statements:
             self.visit(stmt)
+
+        # Clear context after processing
+        self._current_source_tables = []
+        self._current_output_tables = []
 
     def visit_AssignmentStatement(self, node: ASTNode) -> None:
         from ..ast.data_step import AssignmentStatement
@@ -136,6 +158,7 @@ class FieldVisitor(ASTVisitor):
                     usage_type="kept",
                     context="data_step.keep",
                     table_context=self._current_table,
+                    source_tables=list(self._current_source_tables) if self._current_source_tables else None,
                 )
             )
 
@@ -151,6 +174,7 @@ class FieldVisitor(ASTVisitor):
                     usage_type="dropped",
                     context="data_step.drop",
                     table_context=self._current_table,
+                    source_tables=list(self._current_source_tables) if self._current_source_tables else None,
                 )
             )
 
