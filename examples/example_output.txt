@@ -1,0 +1,112 @@
+
+======================================================================
+ Analyzing: sample_etl.sas
+======================================================================
+
+Parsed 15 statements
+
+======================================================================
+ TABLES
+======================================================================
+
+Input Tables (data sources):
+  - staging.customers_clean
+  - raw.customers
+  - staging.orders_processed
+  - raw.orders
+  - raw.product_catalog
+  - staging.orders_sorted
+  - staging.customers_sorted
+  - staging.orders_complete
+  - mart.product_performance
+  - mart.customer_summary
+
+Output Tables (created/modified):
+  - staging.customers_clean
+  - staging.orders_processed
+  - staging.products
+  - staging.orders_sorted
+  - staging.customers_sorted
+  - staging.orders_enriched
+  - mart.product_performance
+
+======================================================================
+ FIELDS
+======================================================================
+
+Fields Read (8):
+  - a (from: staging.orders_sorted, staging.customers_sorted)
+  - avg_margin
+  - order_count (from: staging.orders_sorted, staging.customers_sorted)
+  - order_date (from: raw.orders)
+  - quantity (from: raw.orders)
+  - status (from: raw.customers)
+  - total_revenue (from: staging.orders_sorted, staging.customers_sorted)
+  - units_sold
+
+Fields Written/Created (10):
+  - customer_tier (from: staging.orders_enriched)
+  - discount_amount (from: staging.orders_processed, raw.orders)
+  - net_amount (from: staging.orders_processed, raw.orders)
+  - order_month (from: staging.orders_processed)
+  - order_quarter (from: staging.orders_processed)
+  - order_total (from: staging.orders_processed, raw.orders)
+  - order_weekday (from: staging.orders_processed, raw.orders)
+  - order_year (from: staging.orders_processed)
+  - orders_per_year (from: staging.orders_enriched)
+  - weekend_order (from: staging.orders_processed)
+
+Fields in KEEP statements (21):
+  - category (from: raw.product_catalog)
+  - cost (from: raw.product_catalog)
+  - customer_id (from: raw.customers, staging.orders_sorted, staging.customers_sorted)
+  - email (from: staging.customers_clean, raw.customers)
+  - first_name (from: staging.customers_clean, raw.customers)
+  - full_name (from: staging.customers_clean, raw.customers)
+  - last_name (from: staging.customers_clean, raw.customers)
+  - lifetime_value (from: raw.customers)
+  - margin (from: staging.products, raw.product_catalog)
+  - premium_flag (from: staging.customers_clean, raw.customers)
+  - price_tier (from: staging.products, raw.product_catalog)
+  - product_id (from: raw.product_catalog)
+  - product_name (from: raw.product_catalog)
+  - region (from: raw.customers)
+  - segment (from: raw.customers)
+  - signup_date (from: raw.customers)
+  - subcategory (from: raw.product_catalog)
+  - supplier_id (from: raw.product_catalog)
+  - tenure_days (from: staging.customers_clean, raw.customers)
+  - tenure_years (from: staging.customers_clean, raw.customers, staging.orders_sorted, staging.customers_sorted)
+  - unit_price (from: raw.orders, raw.product_catalog)
+
+Fields in DROP statements (1):
+  - discount_pct (from: raw.orders)
+
+======================================================================
+ DATA LINEAGE
+======================================================================
+
+Data flow (output <- inputs):
+  staging.customers_clean
+    <- raw.customers
+    (data_step)
+  staging.orders_processed
+    <- raw.orders
+    (data_step)
+  staging.products
+    <- raw.product_catalog
+    (data_step)
+  staging.orders_sorted
+    <- staging.orders_processed
+    (proc_sort)
+  staging.customers_sorted
+    <- staging.customers_clean
+    (proc_sort)
+  staging.orders_enriched
+    <- staging.orders_sorted, staging.customers_sorted
+    (data_step)
+  mart.product_performance
+    <- staging.orders_complete
+    (proc_means)
+
+======================================================================
